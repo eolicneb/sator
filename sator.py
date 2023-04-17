@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import cached_property
 from pathlib import Path
+from traceback import format_exc
 
 
 def deaccent(word):
@@ -105,11 +106,15 @@ class Word:
             self.inverted = self
 
     def __eq__(self, other: str | Word):
+        if other is None:
+            return False
         if isinstance(other, str):
             return self.deaccented == deaccent(other)
         return self.deaccented == other.deaccented
 
     def __lt__(self, other: Word):
+        if other is None:
+            return False
         return self.original < other.original
 
     def __len__(self):
@@ -151,7 +156,7 @@ class Sator:
         return new_sator
 
     def __hash__(self):
-        return hash(tuple(sorted(self.content)))
+        return hash(tuple(sorted([w for w in self.content if w])))
 
     def __copy__(self):
         return Sator(self.length, self.content[:])
@@ -163,7 +168,7 @@ class Sator:
 
     def _fmt_word(self, word: Word | None):
         word_str = "-" * self.length if word is None else word.original.upper()
-        return " ".join(a for a in word_str)
+        return "  ".join(a for a in word_str)
 
     def __iter__(self):
         return iter(self.content)
@@ -198,7 +203,7 @@ class Satorter:
                     self.results.add(result)
                     yield result
             except Exception as e:
-                print(str(e))
+                print(format_exc())
                 print("Sator when error: \n", sator)
 
     def iter_sator_for_central(self, running_word: Word, pos: int = None, sator: Sator = None):
@@ -209,11 +214,15 @@ class Satorter:
             yield new_sator
         else:
             required = "".join(w.deaccented[pos-1] for w in new_sator[pos:self.length - pos])
+            no_words = True
             for running_word in self.words.word_for_letters_in_position(required, pos, self.length):
                 if not running_word.inverted:
                     continue
+                no_words = False
                 for inner_sator in self.iter_sator_for_central(running_word, pos - 1, new_sator):
                     yield inner_sator
+            if no_words and self.near_miss >= pos:
+                yield new_sator
 
     @cached_property
     def middle_pos(self):
@@ -228,5 +237,5 @@ if __name__ == "__main__":
     for length in range(2, MAX_LENGTH + 1):
 
         words_list = WordsList(original_list, length)
-        for i, sator in enumerate(Satorter(words_list)):
+        for i, sator in enumerate(Satorter(words_list, near_miss=1)):
             print("\n" + str(sator) + f" length {length} (#{i})")
